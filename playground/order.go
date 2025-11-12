@@ -8,6 +8,11 @@ type order struct {
 	Status      orderStatus `json:"status"`
 }
 
+type invalidOrder struct {
+	order order
+	err   error
+}
+
 func (o order) String() string {
 	return fmt.Sprintf("Product code: %v, Quantity: %v, Status: %v\n",
 		o.ProductCode, o.Quantity, orderStatusToText(o.Status))

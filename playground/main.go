@@ -2,16 +2,46 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"sync"
 )
 
 func main() {
-	receiveOrders()
+	var wg sync.WaitGroup
+	var receivedOrdersCh = make(chan order)
+	var validOrderCh = make(chan order)
+	var invalidOrderCh = make(chan invalidOrder)
+	go receiveOrders(receivedOrdersCh)
+	go validateOrders(receivedOrdersCh, validOrderCh, invalidOrderCh)
+
+	wg.Add(1)
+
+	go func() {
+		order := <-validOrderCh
+		fmt.Printf("Valid order received: %v\n", order)
+		wg.Done()
+	}()
+	go func() {
+		order := <-invalidOrderCh
+		fmt.Printf("Invalid order received: %v, err: %v\n", order.order, order.err)
+		wg.Done()
+	}()
+	wg.Wait()
 	fmt.Println(orders)
 }
 
-func receiveOrders() {
+func validateOrders(in, out chan order, errCh chan invalidOrder) {
+	order := <-in
+	if order.Quantity <= 0 {
+		errCh <- invalidOrder{order: order, err: errors.New("quantity must be greater than zero")}
+	} else {
+		out <- order
+	}
+}
+
+func receiveOrders(out chan order) {
 	for _, rawOrder := range rawOrders {
 		var newOrder order
 		err := json.Unmarshal([]byte(rawOrder), &newOrder)
@@ -20,6 +50,7 @@ func receiveOrders() {
 			continue
 		}
 		orders = append(orders, newOrder)
+		out <- newOrder
 	}
 }
 
