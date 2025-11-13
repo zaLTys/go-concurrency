@@ -12,30 +12,39 @@ func main() {
 	var wg sync.WaitGroup
 	receivedOrdersCh := receiveOrders()
 	validOrderCh, invalidOrderCh := validateOrders(receivedOrdersCh)
+	reservedInventoryCh := reserveInventory(validOrderCh)
 
-	wg.Add(1)
-	go func(validOrderCh <-chan order, invalidOrderCh <-chan invalidOrder) {
-	loop:
-		for {
-			select {
-			case order, ok := <-validOrderCh:
-				if ok {
-					fmt.Printf("Valid order received: %v\n", order)
-				} else {
-					break loop
-				}
-			case order, ok := <-invalidOrderCh:
-				if ok {
-					fmt.Printf("Invalid order received: %v, err: %v\n", order.order, order.err)
-				} else {
-					break loop
-				}
-			}
+	wg.Add(2)
+	go func(invalidOrderCh <-chan invalidOrder) {
+		for order := range invalidOrderCh {
+			fmt.Printf("Invalid ord received %v %v \n", order.order, order.err)
 		}
 		wg.Done()
-	}(validOrderCh, invalidOrderCh)
+	}(invalidOrderCh)
+
+	go func(reservedInventoryCh <-chan order) {
+		for order := range reservedInventoryCh {
+			fmt.Printf("Valid %v \n", order)
+		}
+		wg.Done()
+	}(reservedInventoryCh)
+
 	wg.Wait()
-	fmt.Println(orders)
+	//fmt.Println(orders)
+}
+
+func reserveInventory(in <-chan order) <-chan order {
+	out := make(chan order)
+
+	go func() {
+		for o := range in {
+			o.Status = reserved
+			out <- o
+		}
+		close(out)
+	}()
+
+	return out
 }
 
 func validateOrders(in <-chan order) (<-chan order, <-chan invalidOrder) {
